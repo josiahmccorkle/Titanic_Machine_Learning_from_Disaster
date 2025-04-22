@@ -6,6 +6,22 @@
 
 import os
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import argparse
+
+# Initialize the parser
+parser = argparse.ArgumentParser(description="Example script with CLI flags")
+
+# Add a flag (boolean)
+parser.add_argument("--test", action="store_true", help="Enable this flag")
+
+# Parse the arguments
+args = parser.parse_args()
 
 # List all CSV files in a folder
 filePath = "./data_sets/titanic/"
@@ -15,161 +31,83 @@ print(files)
 dfs = {file: pd.read_csv(f"{filePath}{file}") for file in files}
 
 
-# In[2]:
-
-
-df = dfs.get("train.csv")  # Use train.csv instead
-if df is not None:
-    print(df.head())  # Display first few rows
+if args.test:
+    df = dfs["test.csv"]
 else:
-    print("Error: 'train.csv' not found")
-
-
-# In[3]:
-
-
-df = df.drop(columns=['PassengerId', 'Name', 'Ticket', 'Cabin'])  # Drop unnecessary columns
-print(df.head())  # Check the new structure
-
-
-# In[4]:
-
-
-print(df.isnull().sum())  # Shows count of missing values per column
-
-
-# In[5]:
-
-
-df['Age'] = df['Age'].fillna(df['Age'].median())  # No warning
-
-
-# In[6]:
-
-
-df['Embarked'] = df['Embarked'].fillna(df['Embarked'].mode()[0])
-
-
-# In[7]:
-
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-sns.countplot(data=df, x="Survived", hue="Sex")
-plt.show()
-
-
-# In[8]:
-
-
-print(df.dtypes)
-# sns.heatmap(df.corr(), annot=True, cmap="coolwarm")
-# plt.show()
-
-
-# In[9]:
-
-
-sns.heatmap(df.select_dtypes(include=['number']).corr(), annot=True, cmap="coolwarm")
-plt.show()
-
-
-# In[10]:
-
-
-df["Sex"] = df["Sex"].map({"male": 0, "female": 1})
-
-
-# In[11]:
-
-
-print(df["Sex"].unique())  # Should output: [0 1]
-
-
-# In[12]:
-
-
-df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2})
-
-
-# In[13]:
-
-
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-# Compute correlation matrix
-corr_matrix = df.corr()
-
-# Plot heatmap
-sns.heatmap(corr_matrix, annot=True, cmap="coolwarm")
-plt.show()
-
-
-# In[14]:
-
-
-import matplotlib.pyplot as plt  
-import seaborn as sns  
-
-sns.histplot(df['Age'].dropna(), bins=30, kde=True)  
-plt.title("Age Distribution of Titanic Passengers")  
-plt.show()  
-
-
-# In[15]:
-
-
-df["Embarked"]
-
-
-# In[16]:
-
-
-df = pd.get_dummies(df, columns=["Embarked"], drop_first=True)
-
-
-# In[17]:
-
-
-print(df.head())  
-
-
-# In[18]:
-
-
-from sklearn.preprocessing import StandardScaler
-scaler = StandardScaler()
-df[['Age', 'Fare']] = scaler.fit_transform(df[['Age', 'Fare']])
-
-
-# In[19]:
-
-
-print(df[['Age', 'Fare']].head())
-
-
-# In[20]:
-
-
-df['Age'].std()
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
+    df = dfs["train.csv"]
+
+def preprocess(df):
+    df['Age'] = df['Age'].fillna(df['Age'].median())
+    df['Fare'] = df['Fare'].fillna(df['Fare'].median())
+    df['Embarked'] = df['Embarked'].fillna(df['Embarked'].mode()[0])
+    df["FamilySize"] = df["SibSp"] + df["Parch"] + 1
+    df["Sex"] = df["Sex"].map({"male": 0, "female": 1})
+    df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2})
+    df = pd.get_dummies(df, columns=["Embarked"], drop_first=True)
+    scaler = StandardScaler()
+    for col in ['Age', 'Fare']:
+        if col in df.columns:
+            df[[col]] = scaler.fit_transform(df[[col]])
+    return df
+
+def train_model(X, y):
+    model = LogisticRegression()
+    model.fit(X, y)
+    return model
+
+df = preprocess(df)
+
+if not args.test:
+    if df is not None:
+        print(df.head())  # Display first few rows
+    else:
+        print("Error: 'train.csv' not found")
+
+    # Compute correlation matrix
+    corr_matrix = df.select_dtypes(include=['number']).corr()
+
+    # Define features (X) and target (y)
+    X = df.drop(columns=['Survived'])  # Features
+    y = df['Survived']  # Target variable
+
+    # Split into training (80%) and testing (20%)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+    # Initialize and train the model
+    model = train_model(X_train, y_train)
+
+    # Make predictions
+    y_pred = model.predict(X_test)
+
+    # Evaluate accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Model Accuracy: {accuracy:.2f}")
+    sns.countplot(data=df, x="Survived", hue="Sex")
+    plt.show()
+    sns.heatmap(df.select_dtypes(include=['number']).corr(), annot=True, cmap="coolwarm")
+    plt.show()
+
+    sns.heatmap(corr_matrix, annot=True, cmap="coolwarm")
+    plt.show()
+    sns.histplot(df['Age'].dropna(), bins=30, kde=True)
+    plt.title("Age Distribution of Titanic Passengers")
+    plt.show()
+
+else:
+    train_df = preprocess(dfs["train.csv"])
+    # Align columns
+    X_train = train_df.drop(columns=["Survived", "PassengerId", "Name", "Ticket", "Cabin"], errors="ignore")
+    y_train = train_df["Survived"]
+    df = df[X_train.columns]
+
+    # Train on full training set
+    model = train_model(X_train, y_train)
+    predictions = model.predict(df)
+
+    # Save to CSV
+    submission = pd.DataFrame({
+        "PassengerId": dfs["test.csv"]["PassengerId"],
+        "Survived": predictions
+    })
+    submission.to_csv("submission.csv", index=False)
+    print("Predictions saved to submission.csv")
